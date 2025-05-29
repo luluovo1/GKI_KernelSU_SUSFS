@@ -39,6 +39,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - sub_level: "64"
+            os_patch_level: "2023-01"
           #- sub_level: "131"
           #  os_patch_level: "2023-11"
           #- sub_level: "137"
@@ -57,8 +59,8 @@ jobs:
           #  os_patch_level: "2025-01"
           #- sub_level: "178"
           #  os_patch_level: "2025-03"
-          - sub_level: "180"
-            os_patch_level: "2025-05"
+          #- sub_level: "180"
+          #  os_patch_level: "2025-05"
           #- sub_level: "X"
           #  os_patch_level: "lts"
     uses: ./.github/workflows/gki-kernel.yml
