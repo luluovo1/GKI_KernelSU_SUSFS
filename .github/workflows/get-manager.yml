@@ -71,11 +71,11 @@ jobs:
             git clone https://github.com/luluovo1/SukiSU-Ultra.git KernelSU
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU(40726)" ]; then
             echo "This is the SukiSU(40726) variant"
-            git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+            git clone https://github.com/luluovo1/SukiSU-Ultra.git KernelSU
             git -C KernelSU checkout 5da529942987b834c2b02a4819eaa298a8383bf4
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU(40548)" ]; then
             echo "This is the SukiSU(40548) variant"
-            git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+            git clone https://github.com/luluovo1/SukiSU-Ultra.git KernelSU
             git -C KernelSU checkout 3170a48c508f6330ea636c51835a84573fe56ef5
           elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
             echo "This is the ReSukiSU variant"
@@ -151,7 +151,7 @@ jobs:
             BRANCH="dev"
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
             echo "SukiSU..."
-            REPO="SukiSU-Ultra/SukiSU-Ultra"
+            REPO="luluovo1/SukiSU-Ultra"
             KSUM="manager"
           elif [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
             echo "ReSukiSU..."
