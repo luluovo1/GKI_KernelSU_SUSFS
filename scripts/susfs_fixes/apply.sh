@@ -94,6 +94,19 @@ if [[ "$ANDROID_VERSION" == "android13" && "$KERNEL_VERSION" == "5.15" ]]; then
     echo "临时调整 Android 13 5.15 LTS 头文件上下文"
     sed -i '/^#include <trace\/hooks\/blk.h>$/d' fs/namespace.c
     sed -i '/^#include <trace\/hooks\/mm.h>$/d' fs/proc/task_mmu.c
+  else
+    # 2025-12 起 GKI 源码移除了 trace/hooks include，但固定提交的 SUSFS
+    # 补丁仍以这两行为上下文：临时补回以便匹配，补丁应用后再删除
+    if ! grep -qF '#include <trace/hooks/blk.h>' fs/namespace.c; then
+      echo "临时补回 Android 13 5.15 namespace.c trace/hooks 头文件"
+      sed -i '/^#include "internal.h"$/a #include <trace/hooks/blk.h>' fs/namespace.c
+      SUSFS_TRACE_BLK_ADDED=1
+    fi
+    if ! grep -qF '#include <trace/hooks/mm.h>' fs/proc/task_mmu.c; then
+      echo "临时补回 Android 13 5.15 task_mmu.c trace/hooks 头文件"
+      sed -i '/^#include <linux\/pkeys.h>$/a #include <trace/hooks/mm.h>' fs/proc/task_mmu.c
+      SUSFS_TRACE_MM_ADDED=1
+    fi
   fi
 fi
 
@@ -217,6 +230,16 @@ if [[ "$ANDROID_VERSION" == "android13" && "$KERNEL_VERSION" == "5.15" ]]; then
     fi
     if ! grep -qF '#include <trace/hooks/mm.h>' fs/proc/task_mmu.c; then
       sed -i '/^#include <linux\/pkeys.h>$/a #include <trace/hooks/mm.h>' fs/proc/task_mmu.c
+    fi
+  else
+    # 删除打补丁前临时补回的 trace/hooks include（源码本身没有该头文件）
+    if [[ -n "$SUSFS_TRACE_BLK_ADDED" ]]; then
+      echo "移除临时补回的 namespace.c trace/hooks 头文件"
+      sed -i '/^#include <trace\/hooks\/blk.h>$/d' fs/namespace.c
+    fi
+    if [[ -n "$SUSFS_TRACE_MM_ADDED" ]]; then
+      echo "移除临时补回的 task_mmu.c trace/hooks 头文件"
+      sed -i '/^#include <trace\/hooks\/mm.h>$/d' fs/proc/task_mmu.c
     fi
   fi
 fi
