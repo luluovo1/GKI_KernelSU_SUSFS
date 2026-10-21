@@ -18,7 +18,7 @@ on:
           - "6.1"
           - "6.6"
           - "6.12"
-        default: "5.10"
+        default: "5.15"
       kernelsu_variant:
         description: "KernelSU 变体"
         required: true
@@ -30,7 +30,7 @@ on:
           - SukiSU(40726)
           - SukiSU(40548)
           - BakaSU
-        default: BakaSU
+        default: SukiSU
       ksu_mode:
         description: "KernelSU / SUSFS 模式"
         required: true
@@ -44,7 +44,7 @@ on:
         description: "KPM 功能（patched 尚不支持）"
         required: true
         type: choice
-        default: "disabled (关闭)"
+        default: "enabled (开启)"
         options:
           - "disabled (关闭)"
           - "enabled (开启)"
@@ -73,7 +73,7 @@ on:
         description: "安全补丁级别 (如 2022-01, lts)"
         required: true
         type: string
-        default: "2022-01"
+        default: "2025-12"
       version:
         description: "自定义版本名 (可选)"
         required: false

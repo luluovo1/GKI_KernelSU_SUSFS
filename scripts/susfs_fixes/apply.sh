@@ -194,6 +194,28 @@ if ! grep -RqsE '^int[[:space:]]+ksu_setup_preinit_file[[:space:]]*\(' "$KSU_KER
   sed -i 's|^+#ifndef KSU_NO_PREINIT|+#if 0 /* KSU 无 preinit 接口 */|' "$SUSFS_PATCH"
 fi
 
+# SELinux 伪装 hook：官方 KernelSU 的 my_setprocattr / my_write_context /
+# my_write_access 是 static 实现，SukiSU 走自己的 fake_status 机制，没有这些导出符号。
+# 补丁 hunk 行数不能变，所以把 extern 声明换成注释、调用换回原函数。
+if [ -d "$KSU_KERNEL_DIR" ] && ! grep -Rqs 'my_setprocattr' "$KSU_KERNEL_DIR"; then
+  echo "KernelSU 未导出 my_setprocattr/my_write_*，SELinux 伪装回退原生实现"
+  sed -i 's|^+extern int my_setprocattr(const char \*name, void \*value, size_t size);|+/* SukiSU: 无 my_setprocattr，回退原生 */|' "$SUSFS_PATCH"
+  sed -i 's|^+extern ssize_t my_write_context(struct file \*file, char \*buf, size_t size);|+/* SukiSU: 无 my_write_context，回退原生 */|' "$SUSFS_PATCH"
+  sed -i 's|^+extern ssize_t my_write_access(struct file \*file, char \*buf, size_t size);|+/* SukiSU: 无 my_write_access，回退原生 */|' "$SUSFS_PATCH"
+  sed -i 's|return my_setprocattr(name, value, size);|return selinux_setprocattr(name, value, size);|g' "$SUSFS_PATCH"
+  sed -i 's|return my_write_context(file, buf, size);|return sel_write_context(file, buf, size);|g' "$SUSFS_PATCH"
+  sed -i 's|return my_write_access(file, buf, size);|return sel_write_access(file, buf, size);|g' "$SUSFS_PATCH"
+fi
+
+# SukiSU builtin 只声明了 ksu_manager_appid，定义在 main 的 throne_tracker.c 里；
+# KPM 打开后 compact.c 会引用它，缺定义直接链接失败。
+if [ -d "$KSU_KERNEL_DIR" ] && grep -Rqs 'extern uid_t ksu_manager_appid' "$KSU_KERNEL_DIR" && ! grep -RqsE '^[[:space:]]*uid_t[[:space:]]+ksu_manager_appid[[:space:]]*=' "$KSU_KERNEL_DIR"; then
+  echo "KernelSU 缺少 ksu_manager_appid 定义，补入 ksu.c"
+  printf '
+uid_t ksu_manager_appid = (uid_t)-1;
+' >> "$KSU_KERNEL_DIR/ksu.c"
+fi
+
 patch -p1 < "$SUSFS_PATCH" || true
 
 # 为尚未提供 SU 会话 FD 接口的 SukiSU/BakaSU 恢复旧版 exec hook 行为
