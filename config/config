@@ -14,7 +14,8 @@
 
 # 是否启用自定义提交 (true/false)
 custom=true
-sukisu=cc4713dd07562cfae019a3d08812abcc7bb683b1
+sukisu=ee35e65428054476c279eae59f7f2bba272040b9
+
 
 
 # ==================== SUSFS 各分支的 commit hash ====================
