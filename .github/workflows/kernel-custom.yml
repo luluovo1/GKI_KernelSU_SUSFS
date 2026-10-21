@@ -203,7 +203,7 @@ jobs:
 
   build-custom-kernel:
     name: "${{ needs.resolve-version.outputs.kernel_full }}-${{ needs.resolve-version.outputs.android_version }}-${{ inputs.os_patch_level }}"
-    needs: resolve-version
+    needs: [resolve-version, get-ksu-manager]
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -228,6 +228,9 @@ jobs:
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
+      ksu_expected_size: ${{ needs['get-ksu-manager'].outputs.ksuExpectedSize }}
+      ksu_expected_hash: ${{ needs['get-ksu-manager'].outputs.ksuExpectedHash }}
+      ksu_package_name: ${{ needs['get-ksu-manager'].outputs.ksuPackageName }}
 
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml

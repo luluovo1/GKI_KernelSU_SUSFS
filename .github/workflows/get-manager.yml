@@ -17,6 +17,15 @@ on:
       ksuVer:
         description: "The calculated KSU version number"
         value: ${{ jobs.get_ksu_manager.outputs.ksuVer }}
+      ksuExpectedSize:
+        description: "Manager APK signing certificate size"
+        value: ${{ jobs.get_ksu_manager.outputs.ksuExpectedSize }}
+      ksuExpectedHash:
+        description: "Manager APK signing certificate sha256"
+        value: ${{ jobs.get_ksu_manager.outputs.ksuExpectedHash }}
+      ksuPackageName:
+        description: "Manager APK package name"
+        value: ${{ jobs.get_ksu_manager.outputs.ksuPackageName }}
 
 jobs:
   get_ksu_manager:
@@ -24,6 +33,9 @@ jobs:
     outputs:
       ksuVer: ${{ steps.get_version.outputs.kversion }}
       susVer: ${{ steps.get_version.outputs.sversion }}
+      ksuExpectedSize: ${{ steps.ksu_sig.outputs.size }}
+      ksuExpectedHash: ${{ steps.ksu_sig.outputs.hash }}
+      ksuPackageName: ${{ steps.ksu_sig.outputs.pkg }}
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
@@ -31,6 +43,9 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
+      - name: 检出仓库
+        uses: actions/checkout@v7
+
       - name: 🧐 Debug Workflow Caller Context
         run: |
           echo "==================== DEBUG CONTEXT ===================="
@@ -409,6 +424,31 @@ jobs:
       - name: Notify on failure
         if: steps.add_KSU.outcome == 'failure'
         run: echo "下载CI构建的KSU失败!"
+
+      - name: 提取管理器签名
+        id: ksu_sig
+        if: steps.add_KSU.outcome == 'success'
+        run: |
+          set -e
+
+          # spoofed 是实际安装的包：包名随机，必须写进内核才能被识别
+          APK=$(find manager-artifacts -type f -name "*-spoofed.apk" | head -n 1)
+          if [ -z "$APK" ]; then
+            APK=$(find manager-artifacts -type f -name "*-release.apk" | head -n 1)
+          fi
+          if [ -z "$APK" ]; then
+            echo "::error::没有可用于提取签名的管理器 APK"
+            exit 1
+          fi
+          echo "分析管理器: $APK"
+
+          read -r SIZE HASH PKG < <(python3 .github/scripts/apk_cert.py "$APK")
+          echo "证书大小: $SIZE"
+          echo "证书哈希: $HASH"
+          echo "包名: $PKG"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "pkg=$PKG" >> "$GITHUB_OUTPUT"
 
       - name: 上传APK
         if: steps.add_KSU.outcome == 'success'

@@ -30,6 +30,19 @@ on:
         type: string
         default: 关闭
 
+      ksu_expected_size:
+        required: false
+        type: string
+        default: ""
+      ksu_expected_hash:
+        required: false
+        type: string
+        default: ""
+      ksu_package_name:
+        required: false
+        type: string
+        default: ""
+
       # ==================== 可选配置 ====================
       version:
         required: false
@@ -585,6 +598,14 @@ jobs:
 
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
           echo "KSU 分支: $BRANCH"
+
+      - name: 对齐管理器签名
+        if: inputs.ksu_variant == 'SukiSU' && inputs.ksu_expected_size != ''
+        run: |
+          echo "KSU_EXPECTED_SIZE=${{ inputs.ksu_expected_size }}" >> "$GITHUB_ENV"
+          echo "KSU_EXPECTED_HASH=${{ inputs.ksu_expected_hash }}" >> "$GITHUB_ENV"
+          echo "KSU_PACKAGE_NAME=${{ inputs.ksu_package_name }}" >> "$GITHUB_ENV"
+          echo "管理器签名: size=${{ inputs.ksu_expected_size }} pkg=${{ inputs.ksu_package_name }}"
 
       - name: 添加 KernelSU
         if: inputs.ksu_mode != '禁用KSU'
@@ -1594,7 +1615,7 @@ jobs:
                 if [ "${{ inputs.kernel_version }}" = "6.12" ]; then
                   LTO_FLAG="--lto=none"
                 fi
-                tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG //common:kernel_aarch64_dist || exit 1
+                tools/bazel build --disk_cache=/home/runner/.cache/bazel --config=fast $LTO_FLAG $FRAG_FLAG --action_env=KSU_EXPECTED_SIZE --action_env=KSU_EXPECTED_HASH --action_env=KSU_PACKAGE_NAME //common:kernel_aarch64_dist || exit 1
                 strings ./bazel-bin/common/kernel_aarch64/Image | grep 'Linux version'
               fi
 
