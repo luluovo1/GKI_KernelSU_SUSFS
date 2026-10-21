@@ -60,7 +60,7 @@ jobs:
           fi
 
   deploy-pages:
-    if: ${{ github.repository == 'zzh20188/GKI_KernelSU_SUSFS' }}
+    if: ${{ github.repository == 'luluovo1/GKI_KernelSU_SUSFS' }}
     needs: update-data
     runs-on: ubuntu-24.04
     environment:

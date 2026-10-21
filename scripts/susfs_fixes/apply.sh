@@ -90,23 +90,18 @@ if [[ "$ANDROID_VERSION" == "android13" && "$KERNEL_VERSION" == "5.15" ]]; then
     fi
     adjust_legacy_fdinfo_context
   fi
-  if [[ "$OS_PATCH_LEVEL" == "lts" ]]; then
-    echo "临时调整 Android 13 5.15 LTS 头文件上下文"
-    sed -i '/^#include <trace\/hooks\/blk.h>$/d' fs/namespace.c
-    sed -i '/^#include <trace\/hooks\/mm.h>$/d' fs/proc/task_mmu.c
-  else
-    # 2025-12 起 GKI 源码移除了 trace/hooks include，但固定提交的 SUSFS
-    # 补丁仍以这两行为上下文：临时补回以便匹配，补丁应用后再删除
-    if ! grep -qF '#include <trace/hooks/blk.h>' fs/namespace.c; then
-      echo "临时补回 Android 13 5.15 namespace.c trace/hooks 头文件"
-      sed -i '/^#include "internal.h"$/a #include <trace/hooks/blk.h>' fs/namespace.c
-      SUSFS_TRACE_BLK_ADDED=1
-    fi
-    if ! grep -qF '#include <trace/hooks/mm.h>' fs/proc/task_mmu.c; then
-      echo "临时补回 Android 13 5.15 task_mmu.c trace/hooks 头文件"
-      sed -i '/^#include <linux\/pkeys.h>$/a #include <trace/hooks/mm.h>' fs/proc/task_mmu.c
-      SUSFS_TRACE_MM_ADDED=1
-    fi
+  # LTS 与月度分支都已移除这两行 include（2026 年起连 include/trace/hooks/blk.h
+  # 头文件本身都被上游删除），但固定提交的 SUSFS 补丁仍拿它们当 hunk 上下文：
+  # 统一在打补丁前临时补回，应用后再删掉，否则会产生 2 个 .rej 并残留不存在的头文件。
+  if ! grep -qF '#include <trace/hooks/blk.h>' fs/namespace.c; then
+    echo "临时补回 Android 13 5.15 namespace.c trace/hooks 头文件"
+    sed -i '/^#include "internal.h"$/a #include <trace/hooks/blk.h>' fs/namespace.c
+    SUSFS_TRACE_BLK_ADDED=1
+  fi
+  if ! grep -qF '#include <trace/hooks/mm.h>' fs/proc/task_mmu.c; then
+    echo "临时补回 Android 13 5.15 task_mmu.c trace/hooks 头文件"
+    sed -i '/^#include <linux\/pkeys.h>$/a #include <trace/hooks/mm.h>' fs/proc/task_mmu.c
+    SUSFS_TRACE_MM_ADDED=1
   fi
 fi
 
@@ -119,9 +114,12 @@ if [[ "$ANDROID_VERSION" == "android14" && "$KERNEL_VERSION" == "6.1" ]]; then
     echo "临时调整 Android 14 6.1 dma-buf.h 上下文"
     sed -i '/^#include <linux\/cpufreq_times.h>$/a #include <linux/dma-buf.h>' fs/proc/base.c
   fi
-  if [[ "$CURRENT_SUB" -ge 157 ]]; then
-    echo "临时调整 Android 14 6.1 namespace.c 上下文"
-    sed -i '/^#include <trace\/hooks\/blk.h>$/d' fs/namespace.c
+  # 补丁以 blk.h 为 hunk 上下文，2026 年起 GKI 源码已不再 include：
+  # 临时补回以便匹配，补丁应用后再删除
+  if ! grep -qF '#include <trace/hooks/blk.h>' fs/namespace.c; then
+    echo "临时补回 Android 14 6.1 namespace.c trace/hooks 头文件"
+    sed -i '/^#include "internal.h"$/a #include <trace/hooks/blk.h>' fs/namespace.c
+    SUSFS_TRACE_BLK_ADDED=1
   fi
 fi
 
@@ -133,6 +131,17 @@ if [[ "$ANDROID_VERSION" == "android15" && "$KERNEL_VERSION" == "6.6" ]]; then
   if [[ "$CURRENT_SUB" -le 57 ]] && ! grep -qF '#include <linux/zswap.h>' mm/memory.c; then
     echo "临时调整 Android 15 6.6 memory.c 上下文"
     sed -i '/^#include <linux\/sched\/sysctl.h>$/a #include <linux/zswap.h>' mm/memory.c
+  fi
+  # 补丁以 blk.h / fs.h 两行为 hunk 上下文，缺失时临时补回，应用后删除
+  if ! grep -qF '#include <trace/hooks/blk.h>' fs/namespace.c; then
+    echo "临时补回 Android 15 6.6 namespace.c trace/hooks 头文件"
+    sed -i '/^#include "internal.h"$/a #include <trace/hooks/blk.h>\n#include <trace/hooks/fs.h>' fs/namespace.c
+    SUSFS_TRACE_BLK_ADDED=1
+    SUSFS_TRACE_FS_ADDED=1
+  elif ! grep -qF '#include <trace/hooks/fs.h>' fs/namespace.c; then
+    echo "临时补回 Android 15 6.6 namespace.c trace/hooks/fs.h"
+    sed -i '/^#include <trace\/hooks\/blk.h>$/a #include <trace/hooks/fs.h>' fs/namespace.c
+    SUSFS_TRACE_FS_ADDED=1
   fi
 fi
 
@@ -153,6 +162,36 @@ if grep -q '^ static int thaw_super_locked' "$SUSFS_PATCH" \
   echo "临时调整 super.c 上下文"
   sed -i '/^#include <trace\/hooks\/fs.h>$/,+1d' fs/super.c
   SUPER_FS_H_REMOVED=1
+fi
+
+# ==================== 对齐 KernelSU 实际接口 ====================
+# 上游 SUSFS 补丁自 2026-10-19 起按 KernelSU 官方主线接口重写，
+# 而本项目跟随的 SukiSU 接口不同（bool 开关、三参数 sys_read、无 preinit），
+# 直接应用会在编译期类型冲突、链接期缺符号。这里按 KSU 源码里的真实定义逐项降级，
+# 检测不到就保持补丁原样。
+KSU_KERNEL_DIR="$KERNEL_ROOT/KernelSU/kernel"
+
+# su_compat 开关：官方 main 已改为 static_key_true，SukiSU 仍是 bool
+if [ -d "$KSU_KERNEL_DIR" ] \
+  && ! grep -Rqs 'DEFINE_STATIC_KEY_TRUE(ksu_su_compat_enabled)' "$KSU_KERNEL_DIR"; then
+  echo "KernelSU 使用 bool 版 ksu_su_compat_enabled，降级补丁中的 static_key 用法"
+  sed -i 's|^+extern struct static_key_true ksu_su_compat_enabled;|+extern bool ksu_su_compat_enabled;|' "$SUSFS_PATCH"
+  sed -i 's|static_branch_likely(&ksu_su_compat_enabled)|likely(ksu_su_compat_enabled)|g' "$SUSFS_PATCH"
+fi
+
+# ksu_handle_sys_read：官方 main 是 void(unsigned int)，旧版是 int(fd, buf, count)
+if [ -d "$KSU_KERNEL_DIR" ] \
+  && ! grep -RqsE '^void[[:space:]]+ksu_handle_sys_read[[:space:]]*\(' "$KSU_KERNEL_DIR" \
+  && grep -RqsE '^int[[:space:]]+ksu_handle_sys_read[[:space:]]*\(' "$KSU_KERNEL_DIR"; then
+  echo "KernelSU 使用三参数版 ksu_handle_sys_read，调整补丁的声明与调用"
+  sed -i 's|^+extern __attribute__((cold)) void ksu_handle_sys_read(unsigned int fd);|+extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_ptr);|' "$SUSFS_PATCH"
+  sed -i 's|ksu_handle_sys_read(fd);|ksu_handle_sys_read(fd, NULL, NULL);|g' "$SUSFS_PATCH"
+fi
+
+# preinit：官方 main 新增的 execve 接管接口，SukiSU / BakaSU 都没有
+if ! grep -RqsE '^int[[:space:]]+ksu_setup_preinit_file[[:space:]]*\(' "$KSU_KERNEL_DIR"; then
+  echo "KernelSU 未提供 preinit 接口，禁用补丁中的 preinit 段"
+  sed -i 's|^+#ifndef KSU_NO_PREINIT|+#if 0 /* KSU 无 preinit 接口 */|' "$SUSFS_PATCH"
 fi
 
 patch -p1 < "$SUSFS_PATCH" || true
@@ -223,24 +262,14 @@ if [[ "$ANDROID_VERSION" == "android13" && "$KERNEL_VERSION" == "5.15" ]]; then
     sed -i 's|i_uid_into_mnt(i_user_ns(&fi->inode), &fi->inode).val|i_uid_into_mnt(\&init_user_ns, \&fi->inode).val|g' fs/susfs.c
     sed -i 's|i_uid_into_mnt(i_user_ns(inode), inode).val|i_uid_into_mnt(\&init_user_ns, inode).val|g' fs/susfs.c
   fi
-  if [[ "$OS_PATCH_LEVEL" == "lts" ]]; then
-    echo "还原 Android 13 5.15 LTS 头文件上下文"
-    if ! grep -qF '#include <trace/hooks/blk.h>' fs/namespace.c; then
-      sed -i '/^#include "internal.h"$/a #include <trace/hooks/blk.h>' fs/namespace.c
-    fi
-    if ! grep -qF '#include <trace/hooks/mm.h>' fs/proc/task_mmu.c; then
-      sed -i '/^#include <linux\/pkeys.h>$/a #include <trace/hooks/mm.h>' fs/proc/task_mmu.c
-    fi
-  else
-    # 删除打补丁前临时补回的 trace/hooks include（源码本身没有该头文件）
-    if [[ -n "$SUSFS_TRACE_BLK_ADDED" ]]; then
-      echo "移除临时补回的 namespace.c trace/hooks 头文件"
-      sed -i '/^#include <trace\/hooks\/blk.h>$/d' fs/namespace.c
-    fi
-    if [[ -n "$SUSFS_TRACE_MM_ADDED" ]]; then
-      echo "移除临时补回的 task_mmu.c trace/hooks 头文件"
-      sed -i '/^#include <trace\/hooks\/mm.h>$/d' fs/proc/task_mmu.c
-    fi
+  # 删除打补丁前临时补回的 trace/hooks include（源码本身没有该头文件）
+  if [[ -n "$SUSFS_TRACE_BLK_ADDED" ]]; then
+    echo "移除临时补回的 namespace.c trace/hooks 头文件"
+    sed -i '/^#include <trace\/hooks\/blk.h>$/d' fs/namespace.c
+  fi
+  if [[ -n "$SUSFS_TRACE_MM_ADDED" ]]; then
+    echo "移除临时补回的 task_mmu.c trace/hooks 头文件"
+    sed -i '/^#include <trace\/hooks\/mm.h>$/d' fs/proc/task_mmu.c
   fi
 fi
 
@@ -252,9 +281,9 @@ if [[ "$ANDROID_VERSION" == "android14" && "$KERNEL_VERSION" == "6.1" ]]; then
     echo "还原 Android 14 6.1 base.c 临时调整"
     sed -i '/^#include <linux\/dma-buf.h>$/d' fs/proc/base.c
   fi
-  if [[ "$CURRENT_SUB" -ge 157 ]] && ! grep -qF '#include <trace/hooks/blk.h>' fs/namespace.c; then
-    echo "还原 Android 14 6.1 namespace.c 临时调整"
-    sed -i '/^#include "internal.h"$/a #include <trace/hooks/blk.h>' fs/namespace.c
+  if [[ -n "$SUSFS_TRACE_BLK_ADDED" ]]; then
+    echo "移除临时补回的 namespace.c trace/hooks 头文件"
+    sed -i '/^#include <trace\/hooks\/blk.h>$/d' fs/namespace.c
   fi
 fi
 
@@ -266,6 +295,14 @@ if [[ "$ANDROID_VERSION" == "android15" && "$KERNEL_VERSION" == "6.6" ]]; then
   if [[ "$CURRENT_SUB" -le 57 ]]; then
     echo "还原 Android 15 6.6 memory.c 临时调整"
     sed -i '/^#include <linux\/zswap.h>$/d' mm/memory.c
+  fi
+  if [[ -n "$SUSFS_TRACE_FS_ADDED" ]]; then
+    echo "移除临时补回的 namespace.c trace/hooks/fs.h"
+    sed -i '/^#include <trace\/hooks\/fs.h>$/d' fs/namespace.c
+  fi
+  if [[ -n "$SUSFS_TRACE_BLK_ADDED" ]]; then
+    echo "移除临时补回的 namespace.c trace/hooks 头文件"
+    sed -i '/^#include <trace\/hooks\/blk.h>$/d' fs/namespace.c
   fi
 fi
 

@@ -9,7 +9,7 @@ jobs:
   check-and-trigger:
     runs-on: ubuntu-24.04
     # 仅允许指定仓库所有者触发自动构建
-    if: contains(fromJSON('["zzh20188", "elysias123"]'), github.repository_owner)
+    if: contains(fromJSON('["zzh20188", "elysias123", "luluovo1"]'), github.repository_owner)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -20,7 +20,7 @@ jobs:
       - name: Get latest commit SHA from SukiSU-Ultra
         id: get_sha
         run: |
-          LATEST_SHA=$(curl -s https://api.github.com/repos/SukiSU-Ultra/SukiSU-Ultra/commits/main | jq -r '.sha')
+          LATEST_SHA=$(curl -s https://api.github.com/repos/luluovo1/SukiSU-Ultra/commits/main | jq -r '.sha')
           echo "sha=$LATEST_SHA" >> $GITHUB_OUTPUT
           echo "Latest SHA: $LATEST_SHA"
           

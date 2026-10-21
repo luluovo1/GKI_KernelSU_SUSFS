@@ -68,14 +68,14 @@ jobs:
             git clone https://github.com/KernelSU-Next/KernelSU-Next.git KernelSU
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
             echo "This is the SukiSU variant"
-            git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+            git clone https://github.com/luluovo1/SukiSU-Ultra.git KernelSU
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU(40726)" ]; then
             echo "This is the SukiSU(40726) variant"
-            git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+            git clone https://github.com/luluovo1/SukiSU-Ultra.git KernelSU
             git -C KernelSU checkout 5da529942987b834c2b02a4819eaa298a8383bf4
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU(40548)" ]; then
             echo "This is the SukiSU(40548) variant"
-            git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+            git clone https://github.com/luluovo1/SukiSU-Ultra.git KernelSU
             git -C KernelSU checkout 3170a48c508f6330ea636c51835a84573fe56ef5
           elif [ "${{ inputs.kernelsu_variant }}" == "BakaSU" ]; then
             echo "This is the BakaSU variant"
@@ -133,9 +133,16 @@ jobs:
           if [ -n "$LEGACY_RELEASE_TAG" ]; then
             echo "下载 ${{ inputs.kernelsu_variant }} 管理器..."
             mkdir -p "manager-artifacts/$LEGACY_DIR"
-            MANAGER_URL=$(curl -fsSL "https://api.github.com/repos/zzh20188/GKI_KernelSU_SUSFS/releases/tags/$LEGACY_RELEASE_TAG" |
+            MANAGER_URL=$(curl -fsSL "https://api.github.com/repos/luluovo1/GKI_KernelSU_SUSFS/releases/tags/$LEGACY_RELEASE_TAG" |
               jq -r '.assets[] | select(.name | startswith("SukiSU_") and endswith("-release.apk")) | .browser_download_url' |
               head -n 1)
+            if [ -z "$MANAGER_URL" ]; then
+              # 个人仓库还没有对应 release 时回退上游资产托管
+              echo "个人仓库缺少 $LEGACY_RELEASE_TAG，回退上游 release"
+              MANAGER_URL=$(curl -fsSL "https://api.github.com/repos/zzh20188/GKI_KernelSU_SUSFS/releases/tags/$LEGACY_RELEASE_TAG" |
+                jq -r '.assets[] | select(.name | startswith("SukiSU_") and endswith("-release.apk")) | .browser_download_url' |
+                head -n 1)
+            fi
             if [ -z "$MANAGER_URL" ]; then
               echo "未找到 ${{ inputs.kernelsu_variant }} 管理器下载地址。"
               exit 1
@@ -151,7 +158,7 @@ jobs:
             BRANCH="dev"
           elif [ "${{ inputs.kernelsu_variant }}" == "SukiSU" ]; then
             echo "SukiSU..."
-            REPO="SukiSU-Ultra/SukiSU-Ultra"
+            REPO="luluovo1/SukiSU-Ultra"
             KSUM="manager"
           elif [ "${{ inputs.kernelsu_variant }}" == "BakaSU" ]; then
             echo "BakaSU..."
@@ -304,8 +311,13 @@ jobs:
           if [ -n "$LEGACY_RELEASE_TAG" ]; then
             echo "下载 ${{ inputs.kernelsu_variant }} 对应的 SUSFS 模块..."
             mkdir -p susfs-module
-            curl -fL -o susfs-module/ksu_module_susfs.zip \
-              "https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases/download/$LEGACY_RELEASE_TAG/ksu_module_susfs.zip"
+            if ! curl -fL -o susfs-module/ksu_module_susfs.zip \
+              "https://github.com/luluovo1/GKI_KernelSU_SUSFS/releases/download/$LEGACY_RELEASE_TAG/ksu_module_susfs.zip"; then
+              # 个人仓库还没有对应 release 时回退上游资产托管
+              echo "个人仓库缺少 $LEGACY_RELEASE_TAG 的 SUSFS 模块，回退上游 release"
+              curl -fL -o susfs-module/ksu_module_susfs.zip \
+                "https://github.com/zzh20188/GKI_KernelSU_SUSFS/releases/download/$LEGACY_RELEASE_TAG/ksu_module_susfs.zip"
+            fi
             echo "SUSFS_NAME=$LEGACY_SUSFS_VERSION" >> "$GITHUB_ENV"
             exit 0
           fi

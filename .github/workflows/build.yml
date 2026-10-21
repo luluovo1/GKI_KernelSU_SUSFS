@@ -529,7 +529,7 @@ jobs:
         working-directory: ${{ env.KERNEL_ROOT }}/common/drivers
         run: |
           echo "下载一加 8E 支持补丁..."
-          curl -LSs "https://github.com/zzh20188/GKI_KernelSU_SUSFS/raw/refs/heads/dev/hmbird_patch.c" -o hmbird_patch.c
+          curl -LSs "https://github.com/luluovo1/GKI_KernelSU_SUSFS/raw/refs/heads/dev/hmbird_patch.c" -o hmbird_patch.c
           echo "obj-y += hmbird_patch.o" >> Makefile
 
       - name: 确定 KernelSU 分支
@@ -545,8 +545,12 @@ jobs:
             "SukiSU")
               if [ "${{ inputs.enable_susfs }}" = "false" ]; then
                 BRANCH="-s main"
-              else
+              elif git ls-remote --exit-code --heads https://github.com/luluovo1/SukiSU-Ultra.git builtin >/dev/null 2>&1; then
                 BRANCH="-s builtin"
+              else
+                # 个人 fork 没有 builtin 分支时退回 main，避免 setup.sh checkout 失败
+                echo "上游无 builtin 分支，SUSFS 模式使用 main"
+                BRANCH="-s main"
               fi
               ;;
             "Next")
@@ -586,6 +590,17 @@ jobs:
         if: inputs.ksu_mode != '禁用KSU'
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
+          # setup.sh 内部会执行 git clone 官方 SukiSU-Ultra，
+          # 先克隆个人仓库让它跳过内置 clone，确保构建用的是自己的 fork
+          case "${{ inputs.ksu_variant }}" in
+            "SukiSU"|"SukiSU(40726)"|"SukiSU(40548)")
+              if [ ! -d KernelSU ]; then
+                echo "预克隆 luluovo1/SukiSU-Ultra..."
+                git clone https://github.com/luluovo1/SukiSU-Ultra.git KernelSU
+              fi
+              ;;
+          esac
+
           case "${{ inputs.ksu_variant }}" in
             "Official")
               echo "添加 KernelSU 官方版..."
@@ -607,7 +622,7 @@ jobs:
               ;;
             "SukiSU")
               echo "添加 ${{ inputs.ksu_variant }}..."
-              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+              curl -LSs "https://raw.githubusercontent.com/luluovo1/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
               ;;
             "BakaSU")
               echo "添加 BakaSU..."
@@ -619,7 +634,7 @@ jobs:
                 exit 1
               fi
               echo "添加 ${{ inputs.ksu_variant }}..."
-              curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
+              curl -LSs "https://raw.githubusercontent.com/luluovo1/SukiSU-Ultra/main/kernel/setup.sh" | bash $BRANCH
               ;;
           esac
 
@@ -1622,6 +1637,19 @@ jobs:
 
           df -h "$GITHUB_WORKSPACE" > "$LOG_DIR/disk-usage.txt" 2>&1 || true
           ccache -s > "$LOG_DIR/ccache-stats.txt" 2>&1 || true
+
+          # 把最后一次编译的错误行写进 Step Summary：产物只保留 7 天，
+          # 而 Summary 随运行记录长期可见，定位失败不需要下载 artifact
+          LATEST_LOG=$(ls -1 "$LOG_DIR"/compile-attempt-*.log 2>/dev/null | sort -V | tail -1)
+          if [ -n "$LATEST_LOG" ]; then
+            {
+              echo "### 编译失败摘要"
+              echo ""
+              echo '```'
+              grep -nE 'error:|Error [0-9]+|undefined (reference|symbol)|No such file|fatal error|conflicting types' "$LATEST_LOG" | tail -40
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: 上传编译失败日志
         if: ${{ always() && steps.compile_kernel.outcome == 'failure' }}
