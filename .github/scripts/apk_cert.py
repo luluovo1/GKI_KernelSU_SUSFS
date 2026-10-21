@@ -135,7 +135,7 @@ def main():
     der = certificate(apk_path)
     digest = hashlib.sha256(der).hexdigest()
 
-    fallback = re.split(r"[_]", apk_path.rsplit("/", 1)[-1])[0]
+    fallback = apk_path.rsplit("/", 1)[-1].split("_")[0]
     pkg = package_name(apk_path, fallback)
     print(f"0x{len(der):x} {digest} {pkg}")
 
